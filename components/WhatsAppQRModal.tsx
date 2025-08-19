@@ -15,11 +15,22 @@ function WhatsAppQRModal({ visible, onClose }: WhatsAppQRModalProps) {
   const countdownInterval = useRef<NodeJS.Timeout | null>(null);
 
   async function generateQRCode() {
-    setLoading(true);
-    const newUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${Date.now()}`;
-    setQrUrl(newUrl);
-    setCountdown(25);
-    setLoading(false);
+    try {
+      setLoading(true);
+      const baseUrl = process.env.EXPO_PUBLIC_API_URL ?? "";
+      const response = await fetch(`${baseUrl}/whatsapp/qr-code`);
+      const data = await response.json();
+      const code = data.qr || data.qrCode || data.qrcode || data.image;
+      const formatted = code?.startsWith("data:")
+        ? code
+        : `data:image/png;base64,${code}`;
+      setQrUrl(formatted ?? null);
+      setCountdown(25);
+    } catch (err) {
+      console.error("Erro ao gerar QRCode do WhatsApp", err);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
