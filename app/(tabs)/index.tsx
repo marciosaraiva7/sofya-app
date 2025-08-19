@@ -1,15 +1,18 @@
 import { Image } from "expo-image";
+import { useState } from "react";
 import { Button, Platform, StyleSheet } from "react-native";
 
 import { HelloWave } from "@/components/HelloWave";
 import ParallaxScrollView from "@/components/ParallaxScrollView";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
+import QRModal from "@/components/WhatsAppQRModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { router } from "expo-router";
 
 export default function HomeScreen() {
   const { signOut } = useAuth();
+  const [qrVisible, setQrVisible] = useState(false);
 
   function handleSignOut() {
     signOut();
@@ -66,8 +69,18 @@ export default function HomeScreen() {
         </ThemedText>
       </ThemedView>
       <ThemedView style={styles.stepContainer}>
+        <Button
+          title="Abrir QR do WhatsApp"
+          onPress={() => setQrVisible(true)}
+        />
+      </ThemedView>
+      <ThemedView style={styles.stepContainer}>
         <Button title="Sign Out" onPress={handleSignOut} />
       </ThemedView>
+      <QRModal
+        visible={qrVisible}
+        onClose={() => setQrVisible(false)}
+      />
     </ParallaxScrollView>
   );
 }
