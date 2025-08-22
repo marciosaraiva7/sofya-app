@@ -3,8 +3,10 @@ import { IconSymbol } from "@/components/ui/IconSymbol";
 import { useAuth } from "@/contexts/AuthContext";
 import { Image } from "expo-image";
 import { router } from "expo-router";
-import React from "react";
+import React, { useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -15,14 +17,62 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
+import { getMqttClient } from "@/lib/mqtt";
 import "../../global.css";
 
 export default function LoginScreen() {
   const { signIn } = useAuth();
+  const [code, setCode] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-  function handleSignIn() {
-    signIn();
-    router.replace("/");
+  async function handleSignIn() {
+    if (!code.trim()) {
+      Alert.alert("Código inválido", "Por favor, digite o código da sessão");
+      return;
+    }
+
+    setIsLoading(true);
+
+    const client = getMqttClient();
+    const topic = `sofya-platform/${code}/transcriptions`;
+
+    const onSuccess = () => {
+      client.publish(topic, "app_connected");
+      setIsLoading(false);
+      signIn();
+      router.replace({
+        pathname: "/transcription",
+        params: { sessionCode: code },
+      });
+    };
+
+    const onError = (message: string) => {
+      setIsLoading(false);
+      Alert.alert("Erro", message);
+    };
+
+    if (client.connected) {
+      client.subscribe(topic, (err) => {
+        if (!err) {
+          onSuccess();
+        } else {
+          onError("Código inválido. Verifique o código da sessão.");
+        }
+      });
+    } else {
+      client.once("connect", () => {
+        client.subscribe(topic, (err) => {
+          if (!err) {
+            onSuccess();
+          } else {
+            onError("Código inválido. Verifique o código da sessão.");
+          }
+        });
+      });
+      client.once("error", () => {
+        onError("Erro de conexão. Tente novamente.");
+      });
+    }
   }
 
   return (
@@ -50,13 +100,22 @@ export default function LoginScreen() {
               className="text-xl border p-2 rounded-lg border-gray-300 text-center font-mono"
               placeholder="Código de 6-dígitos"
               keyboardType="number-pad"
+              value={code}
+              onChangeText={setCode}
             />
             <TouchableOpacity
               className="bg-[#6b86d6] flex flex-row gap-2 justify-center items-center p-4 rounded-lg"
               onPress={handleSignIn}
+              disabled={isLoading}
             >
-              <Text className=" text-white">Conectar</Text>
-              <IconSymbol color="#ffffff" name="arrow.right" />
+              {isLoading ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <>
+                  <Text className=" text-white">Conectar</Text>
+                  <IconSymbol color="#ffffff" name="arrow.right" />
+                </>
+              )}
             </TouchableOpacity>
           </View>
           <Text className="text-[#6a7282]">
