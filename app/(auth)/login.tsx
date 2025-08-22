@@ -1,9 +1,11 @@
 import { ThemedView } from "@/components/ThemedView";
 import { IconSymbol } from "@/components/ui/IconSymbol";
 import { useAuth } from "@/contexts/AuthContext";
+import { getMqttClient } from "@/lib/mqtt";
+import { useCameraPermissions } from "expo-camera";
 import { Image } from "expo-image";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -17,14 +19,32 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
-import { getMqttClient } from "@/lib/mqtt";
 import "../../global.css";
 
 export default function LoginScreen() {
   const { signIn } = useAuth();
   const [code, setCode] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-
+  const [permission, requestPermission] = useCameraPermissions();
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [activeCamera, setActiveCamera] = useState<boolean>(false);
+  const hasScannedRef = useRef(false);
+  async function openQrScanner() {
+    try {
+      const result = await requestPermission();
+      if (result?.granted || permission?.granted) {
+        hasScannedRef.current = false; // reset antes de abrir
+        setIsScannerOpen(true);
+      } else {
+        Alert.alert(
+          "Permissão negada",
+          "Não foi possível acessar a câmera. Habilite a permissão nas configurações."
+        );
+      }
+    } catch {
+      Alert.alert("Erro", "Falha ao solicitar permissão da câmera.");
+    }
+  }
   async function handleSignIn() {
     if (!code.trim()) {
       Alert.alert("Código inválido", "Por favor, digite o código da sessão");
@@ -35,13 +55,14 @@ export default function LoginScreen() {
 
     const client = getMqttClient();
     const topic = `sofya-platform/${code}/transcriptions`;
-
+    console.log(client);
+    console.log(topic);
     const onSuccess = () => {
       client.publish(topic, "app_connected");
       setIsLoading(false);
       signIn();
-      router.replace({
-        pathname: "/transcription",
+      router.push({
+        pathname: "/record",
         params: { sessionCode: code },
       });
     };
@@ -52,7 +73,7 @@ export default function LoginScreen() {
     };
 
     if (client.connected) {
-      client.subscribe(topic, (err) => {
+      client.subscribe(topic, (err: any) => {
         if (!err) {
           onSuccess();
         } else {
@@ -61,7 +82,7 @@ export default function LoginScreen() {
       });
     } else {
       client.once("connect", () => {
-        client.subscribe(topic, (err) => {
+        client.subscribe(topic, (err: any) => {
           if (!err) {
             onSuccess();
           } else {
@@ -74,6 +95,19 @@ export default function LoginScreen() {
       });
     }
   }
+  const handleBarCodeScanned = useCallback(
+    ({ data }: { data: string }) => {
+      if (hasScannedRef.current) return; // evita disparos múltiplos
+      hasScannedRef.current = true;
+
+      setIsScannerOpen(false); // fecha câmera
+      if (data) {
+        setCode(data); // seta o estado
+        handleSignIn(); // executa imediatamente
+      }
+    },
+    [handleSignIn]
+  );
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
@@ -103,6 +137,7 @@ export default function LoginScreen() {
               value={code}
               onChangeText={setCode}
             />
+
             <TouchableOpacity
               className="bg-[#6b86d6] flex flex-row gap-2 justify-center items-center p-4 rounded-lg"
               onPress={handleSignIn}
@@ -132,5 +167,51 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+  },
+  qrButton: {
+    backgroundColor: "#0f172a",
+    padding: 16,
+    borderRadius: 10,
+    alignItems: "center",
+    marginTop: 12,
+  },
+  qrButtonText: { color: "#fff", fontWeight: "600" },
+  scannerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.8)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  scannerHeader: {
+    position: "absolute",
+    top: 60,
+    left: 20,
+    right: 20,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  scannerTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  closeButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "#111827",
+    borderRadius: 8,
+  },
+  closeButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  scannerFrame: {
+    width: 260,
+    height: 260,
+    borderWidth: 2,
+    borderColor: "#93c5fd",
+    borderRadius: 16,
   },
 });

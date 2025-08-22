@@ -1,4 +1,6 @@
 import { IconSymbol } from "@/components/ui/IconSymbol";
+import { getMqttClient, releaseMqttClient } from "@/lib/mqtt";
+import { router, useLocalSearchParams } from "expo-router";
 import React, {
   useCallback,
   useEffect,
@@ -46,16 +48,78 @@ type BridgeMessage =
 
 export default function Record() {
   const webviewRef = useRef<WebView>(null);
+  const clientRef = React.useRef<any>(null);
 
   const [isReady, setIsReady] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcriptionLive, setTranscriptionLive] = useState(""); // parcial (recognizing)
   const [transcriptionFinal, setTranscriptionFinal] = useState(""); // acumulado (recognized)
-
+  const [isConnected, setIsConnected] = useState<boolean>();
   const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
 
   const [transcriptionUpdate, setTranscriptionUpdate] = useState<string>(""); // new state for transcriptionUpdate
+
+  const { sessionCode } = useLocalSearchParams();
+
+  const topic =
+    typeof sessionCode === "string" && sessionCode
+      ? `sofya-platform/${sessionCode}/transcriptions`
+      : "";
+
+  React.useEffect(() => {
+    if (!topic) return;
+    const client = getMqttClient();
+    clientRef.current = client;
+    if (client.connected) {
+      setIsConnected(true);
+    } else {
+      client.once("connect", () => {
+        setIsConnected(true);
+      });
+      client.once("error", () => {
+        setIsConnected(false);
+      });
+    }
+    return () => {
+      if (clientRef.current && topic) {
+        clientRef.current.unsubscribe(topic);
+      }
+      releaseMqttClient();
+    };
+  }, [topic]);
+
+  const publishTranscription = (text: string) => {
+    if (clientRef.current && isConnected && topic) {
+      clientRef.current.publish(topic, text);
+    }
+  };
+
+  useEffect(() => {
+    if (transcriptionUpdate) {
+      updateTranscription(transcriptionUpdate);
+    }
+  }, [transcriptionUpdate]);
+
+  const updateTranscription = (newLine: string) => {
+    if (!newLine) return;
+    setTranscriptionFinal((prev) => (prev ? prev + "\n" + newLine : newLine));
+    // Envia apenas a última linha transcrita
+    publishTranscription(newLine);
+  };
+
+  const handleDisconnect = () => {
+    clientRef.current.publish(topic, "app_disconnected");
+    router.push("/");
+  };
+
+  const handleTranscriptionFinish = () => {
+    if (clientRef.current && topic) {
+      clientRef.current.publish(topic, "app_disconnected");
+      clientRef.current.unsubscribe(topic);
+    }
+    releaseMqttClient();
+  };
 
   // Utilitário: envia um comando para dentro do WebView
   const postCommand = useCallback((type: string, data: any = {}) => {
@@ -105,15 +169,12 @@ export default function Record() {
     postCommand("getRecognizedState");
   }, [postCommand, pushLog]);
 
-  // Trata mensagens vindas do WebView
   const onMessage = useCallback(
     (event: WebViewMessageEvent) => {
       let msg: BridgeMessage | null = null;
       try {
-        // Pode vir como objeto serializado (string) ou como string simples
         msg = JSON.parse(event.nativeEvent.data);
       } catch {
-        // Se não for JSON válido, embrulha como texto
         msg = {
           type: "unknown",
           data: event.nativeEvent.data,
@@ -146,7 +207,7 @@ export default function Record() {
         case "recognized":
           // Resultado confirmado / final — acumula
           if (msg.data?.transcription != null) {
-            setTranscriptionFinal(msg.data.transcription);
+            updateTranscription(msg.data.transcription);
             setTranscriptionLive(""); // limpa parcial
           }
           setIsTranscribing(!!msg.data?.isTranscribing);
@@ -184,14 +245,14 @@ export default function Record() {
           console.log("WV transcriptionUpdate:", msg.data);
           if (msg.data?.transcription != null) {
             setTranscriptionUpdate(msg.data.transcription);
+            // acrescenta imediatamente como nova linha
+            updateTranscription(msg.data.transcription);
           }
           if (typeof msg.data?.isTranscribing === "boolean") {
             setIsTranscribing(msg.data.isTranscribing);
           }
           break;
         default:
-          // Mensagens não mapeadas
-          // console.log("Mensagem não tratada:", msg);
           break;
       }
     },
@@ -208,8 +269,6 @@ export default function Record() {
     return () => clearInterval(t);
   }, [transcriptionUpdate, pushLog]);
 
-  // Script opcional injetado antes do conteúdo — tenta criar uma ponte para RN caso a página suporte.
-  // Observação: o ideal é a página usar `window.ReactNativeWebView.postMessage(...)` para enviar mensagens de volta.
   const injectedBefore = useMemo(
     () => `
       (function() {
@@ -441,6 +500,10 @@ export default function Record() {
                 <IconSymbol size={28} name="mic" color={"#365FD7"} />
               )}
             </TouchableOpacity>
+            {/* <Button
+              title={"Update"}
+              onPress={() => updateTranscription(transcriptionUpdate)}
+            /> */}
             <Text
               style={{
                 color: "#fff",
