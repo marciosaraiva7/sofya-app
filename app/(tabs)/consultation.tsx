@@ -4,6 +4,7 @@ import ParallaxScrollView from "@/components/ParallaxScrollView";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { IconSymbol } from "@/components/ui/IconSymbol";
+import { router } from "expo-router";
 
 export default function TabTwoScreen() {
   return (
@@ -22,7 +23,11 @@ export default function TabTwoScreen() {
         <ThemedText type="title">Consulta</ThemedText>
       </ThemedView>
       <ThemedText>Inicie uma consulta com o seu médico.</ThemedText>
-      <Button title="Iniciar nova consulta" color="#6b86d6" />
+      <Button
+        title="Iniciar nova consulta"
+        color="#6b86d6"
+        onPress={() => router.push("/record")}
+      />
     </ParallaxScrollView>
   );
 }
