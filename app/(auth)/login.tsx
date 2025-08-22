@@ -2,10 +2,21 @@ import "../../global.css";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
+import { IconSymbol } from "@/components/ui/IconSymbol";
 import { useAuth } from "@/contexts/AuthContext";
 import { router } from "expo-router";
 import React from "react";
-import { Button, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
+} from "react-native";
 
 export default function LoginScreen() {
   const { signIn } = useAuth();
@@ -16,19 +27,34 @@ export default function LoginScreen() {
   }
 
   return (
-    <ThemedView style={styles.container}>
-      <ThemedText type="title">Login</ThemedText>
-      <ThemedText type="subtitle">Conecte a sua sessão do desktop</ThemedText>
-      <Text className="text-3xl text-red-600">testando taiwlind</Text>
-      <View
-        style={{
-          padding: 18,
-        }}
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        <TextInput placeholder="Código de 6-dígitos" />
-      </View>
-      <Button title="Sign In" onPress={handleSignIn} />
-    </ThemedView>
+        <ThemedView className="flex flex-1 px-4 gap-4 justify-center items-center">
+          <ThemedText type="title">Logo</ThemedText>
+          <Text className="text-xl text-gray-600">
+            Conecte a sua sessão do desktop
+          </Text>
+          <View className="flex p-4 w-full gap-4 border rounded-2xl ">
+            <Text className="text-lg font-semibold">Código da sessão</Text>
+            <TextInput
+              className="text-xl border p-2 rounded-lg border-gray-300 text-center font-mono"
+              placeholder="Código de 6-dígitos"
+              keyboardType="number-pad"
+            />
+            <TouchableOpacity
+              className="bg-[#6b86d6] flex flex-row gap-2 justify-center items-center p-4 rounded-lg"
+              onPress={handleSignIn}
+            >
+              <Text className=" text-white">Conectar</Text>
+              <IconSymbol color="#ffffff" name="arrow.right" />
+            </TouchableOpacity>
+          </View>
+        </ThemedView>
+      </KeyboardAvoidingView>
+    </TouchableWithoutFeedback>
   );
 }
 
