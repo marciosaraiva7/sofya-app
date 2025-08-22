@@ -68,19 +68,11 @@ export default function HomeScreen() {
           <ThemedText type="defaultSemiBold">app-example</ThemedText>.
         </ThemedText>
       </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Button
-          title="Abrir QR do WhatsApp"
-          onPress={() => setQrVisible(true)}
-        />
-      </ThemedView>
+
       <ThemedView style={styles.stepContainer}>
         <Button title="Sign Out" onPress={handleSignOut} />
       </ThemedView>
-      <QRModal
-        visible={qrVisible}
-        onClose={() => setQrVisible(false)}
-      />
+      <QRModal visible={qrVisible} onClose={() => setQrVisible(false)} />
     </ParallaxScrollView>
   );
 }
