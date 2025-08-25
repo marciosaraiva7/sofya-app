@@ -14,6 +14,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Animated,
 } from "react-native";
 import WebView, { WebViewMessageEvent } from "react-native-webview";
 
@@ -59,6 +60,8 @@ export default function Record() {
   const [logs, setLogs] = useState<string[]>([]);
 
   const [transcriptionUpdate, setTranscriptionUpdate] = useState<string>(""); // new state for transcriptionUpdate
+
+  const voiceLevel = useRef(new Animated.Value(0)).current;
 
   const { sessionCode } = useLocalSearchParams();
 
@@ -142,9 +145,14 @@ export default function Record() {
 
   const handleStop = useCallback(() => {
     setIsTranscribing(false);
+    Animated.timing(voiceLevel, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
     pushLog("Solicitado STOP");
     postCommand("stopTranscription");
-  }, [postCommand, pushLog]);
+  }, [postCommand, pushLog, voiceLevel]);
 
   // Função para iniciar transcrição via postMessage
   const start = useCallback(() => {
@@ -252,11 +260,20 @@ export default function Record() {
             setIsTranscribing(msg.data.isTranscribing);
           }
           break;
+        case "audioLevel":
+          if (typeof msg.data?.level === "number") {
+            Animated.timing(voiceLevel, {
+              toValue: msg.data.level,
+              duration: 100,
+              useNativeDriver: true,
+            }).start();
+          }
+          break;
         default:
           break;
       }
     },
-    [handleGetStates, pushLog]
+    [handleGetStates, pushLog, voiceLevel]
   );
 
   useEffect(() => {
@@ -335,6 +352,40 @@ export default function Record() {
         try {
           if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
             window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ready', data: { source: 'injected' } }));
+          }
+        } catch(_) {}
+      })();
+      (function(){
+        try {
+          var orig = navigator.mediaDevices && navigator.mediaDevices.getUserMedia;
+          if(orig){
+            navigator.mediaDevices.getUserMedia = function(c){
+              return orig.call(navigator.mediaDevices, c).then(function(stream){
+                try {
+                  var Ctx = window.AudioContext || window.webkitAudioContext;
+                  var ctx = new Ctx();
+                  var analyser = ctx.createAnalyser();
+                  var source = ctx.createMediaStreamSource(stream);
+                  source.connect(analyser);
+                  var data = new Uint8Array(analyser.fftSize);
+                  function tick(){
+                    analyser.getByteTimeDomainData(data);
+                    var sum = 0;
+                    for(var i=0;i<data.length;i++){
+                      var v = (data[i]-128)/128;
+                      sum += v*v;
+                    }
+                    var rms = Math.sqrt(sum / data.length);
+                    try {
+                      window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'audioLevel', data: { level: rms } }));
+                    } catch(_){}
+                    requestAnimationFrame(tick);
+                  }
+                  tick();
+                } catch(_){}
+                return stream;
+              });
+            };
           }
         } catch(_) {}
       })();
@@ -481,6 +532,21 @@ export default function Record() {
               gap: 10,
             }}
           >
+            <Animated.View
+              style={[
+                styles.wave,
+                {
+                  transform: [
+                    {
+                      scale: voiceLevel.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [1, 3],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            />
             <TouchableOpacity
               onPress={isTranscribing ? handleStop : handleStart}
               disabled={!isReady && !isTranscribing}
@@ -567,6 +633,14 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 8,
     marginBottom: 12,
+  },
+  wave: {
+    position: "absolute",
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: "#fff",
+    opacity: 0.3,
   },
   mono: {
     fontFamily: "Courier",
