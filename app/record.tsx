@@ -9,12 +9,12 @@ import React, {
   useState,
 } from "react";
 import {
+  Animated,
   SafeAreaView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-  Animated,
 } from "react-native";
 import WebView, { WebViewMessageEvent } from "react-native-webview";
 
@@ -141,18 +141,19 @@ export default function Record() {
     setIsTranscribing(true);
     pushLog("Solicitado START");
     postCommand("startTranscription");
-  }, [postCommand, pushLog]);
-
-  const handleStop = useCallback(() => {
-    setIsTranscribing(false);
     Animated.timing(voiceLevel, {
       toValue: 0,
       duration: 300,
       useNativeDriver: true,
     }).start();
+  }, [postCommand, pushLog, voiceLevel]);
+
+  const handleStop = useCallback(() => {
+    setIsTranscribing(false);
+
     pushLog("Solicitado STOP");
     postCommand("stopTranscription");
-  }, [postCommand, pushLog, voiceLevel]);
+  }, [postCommand, pushLog]);
 
   // Função para iniciar transcrição via postMessage
   const start = useCallback(() => {
@@ -519,6 +520,24 @@ export default function Record() {
           )}
         </ScrollView> */}
         <View style={styles.row}>
+          <Animated.View
+            style={[
+              styles.wave,
+              {
+                position: "absolute",
+                bottom: 400,
+                left: "40%",
+                transform: [
+                  {
+                    scale: voiceLevel.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [1, 3],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          />
           <View
             style={{
               padding: 0,
@@ -532,21 +551,6 @@ export default function Record() {
               gap: 10,
             }}
           >
-            <Animated.View
-              style={[
-                styles.wave,
-                {
-                  transform: [
-                    {
-                      scale: voiceLevel.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [1, 3],
-                      }),
-                    },
-                  ],
-                },
-              ]}
-            />
             <TouchableOpacity
               onPress={isTranscribing ? handleStop : handleStart}
               disabled={!isReady && !isTranscribing}
