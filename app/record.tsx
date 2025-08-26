@@ -140,6 +140,7 @@ export default function Record() {
   const handleStart = useCallback(() => {
     setIsTranscribing(true);
     pushLog("Solicitado START");
+    postCommand("startAudioCapture");
     postCommand("startTranscription");
     Animated.timing(voiceLevel, {
       toValue: 0,
@@ -152,8 +153,14 @@ export default function Record() {
     setIsTranscribing(false);
 
     pushLog("Solicitado STOP");
+    postCommand("stopAudioCapture");
     postCommand("stopTranscription");
-  }, [postCommand, pushLog]);
+    Animated.timing(voiceLevel, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, [postCommand, pushLog, voiceLevel]);
 
   // Função para iniciar transcrição via postMessage
   const start = useCallback(() => {
@@ -440,6 +447,29 @@ export default function Record() {
               } catch(_) {}
             });
           }
+        } catch(_) {}
+
+        // Inicia/para captura de áudio a pedido do RN
+        try {
+          window.__AUDIO_LEVEL_STREAM = null;
+          window.addEventListener('message', function(e){
+            var data = e && e.data;
+            try {
+              if (data && data.type === 'startAudioCapture') {
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                  navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream){
+                    window.__AUDIO_LEVEL_STREAM = stream;
+                  }).catch(function(){});
+                }
+              }
+              if (data && data.type === 'stopAudioCapture') {
+                if (window.__AUDIO_LEVEL_STREAM) {
+                  window.__AUDIO_LEVEL_STREAM.getTracks().forEach(function(t){ t.stop(); });
+                  window.__AUDIO_LEVEL_STREAM = null;
+                }
+              }
+            } catch(_) {}
+          });
         } catch(_) {}
 
         // Emite READY novamente (pós-carregamento)
